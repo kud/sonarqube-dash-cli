@@ -367,34 +367,43 @@ async function browseIssuesTui({ projectKey, branch, issues, token, host }) {
     const mySeq = ++renderSeq
     const issue = issues[idx]
     if (!issue) return
-    const header = `{bold}${escapeTag(issue.message || "(no message)")}{/bold}`
-    const meta = `${issue.key}  ${issue.severity}  ${issue.type}  ${
-      issue.status || ""
-    }${branch ? `  [${branch}]` : ""}`
-    const location = issue.component
-      ? `${issue.component}${issue.line ? ":" + issue.line : ""}`
+    // Fancy formatting: severity/type/status first row, path & lines next, flow, then highlighted message at bottom
+    const sevTag = `{bold}${severityColor(issue.severity)}{/bold}`
+    const typeTag = `{magenta-fg}${issue.type}{/magenta-fg}`
+    const statusTag = statusColor(issue.status || "")
+    const branchTag = branch ? `{gray-fg}[${branch}]{/gray-fg}` : ""
+    const keyTag = `{cyan-fg}${issue.key}{/cyan-fg}`
+    const locPath = issue.component
+      ? `{blue-fg}${issue.component}{/blue-fg}${issue.line ? ":" + issue.line : ""}`
+      : ""
+    const linesRange = issue.textRange
+      ? `{gray-fg}Lines: ${issue.textRange.startLine}-${issue.textRange.endLine}{/gray-fg}`
       : ""
     let flow = ""
     if (issue.flow && issue.flow.length) {
       flow =
-        "\n{cyan-fg}Flow:{/cyan-fg}\n" +
+        `{cyan-fg}Flow:{/cyan-fg}\n` +
         issue.flow
           .map((f, i) => {
             const loc = f.locations?.[0]
             if (!loc) return ""
-            return `  ${i + 1}. ${escapeTag(loc.msg || "")} (${loc.component}:${
+            return `  ${i + 1}. ${escapeTag(loc.msg || "")} ({${"gray-fg"}}${loc.component}:{${"/gray-fg"}}$${
               loc.textRange?.startLine || "?"
             })`
           })
           .join("\n")
     }
-    detail.setContent(
-      `${header}\n${meta}\n${location}${
-        issue.textRange
-          ? `\nLines: ${issue.textRange.startLine}-${issue.textRange.endLine}`
-          : ""
-      }${flow}`,
-    )
+    const ruleLine = `{gray-fg}${"─".repeat(50)}{/gray-fg}`
+    const messageLine = `{bold}{yellow-fg}${escapeTag(
+      issue.message || "(no message)",
+    )}{/yellow-fg}{/bold}`
+    const metaLine = `${sevTag}  ${typeTag}  ${statusTag}  ${branchTag}  ${keyTag}`
+    let body = metaLine
+    if (locPath) body += `\n${locPath}`
+    if (linesRange) body += `\n${linesRange}`
+    if (flow) body += `\n${flow}`
+    body += `\n${ruleLine}\n${messageLine}`
+    detail.setContent(body)
     code.setContent("Loading code snippet...")
     screen.render()
     const snippet = await getIssueSource({ token, host, issue })
@@ -511,6 +520,18 @@ async function browseIssuesTui({ projectKey, branch, issues, token, host }) {
   // Ensure TERM restored on normal exit
   screen.on("destroy", () => __restoreTERM())
  }
+
+function statusColor(status) {
+  if (!status) return ""
+  const map = {
+    OPEN: '{green-fg}OPEN{/green-fg}',
+    CONFIRMED: '{green-fg}CONFIRMED{/green-fg}',
+    REOPENED: '{yellow-fg}REOPENED{/yellow-fg}',
+    RESOLVED: '{cyan-fg}RESOLVED{/cyan-fg}',
+    CLOSED: '{gray-fg}CLOSED{/gray-fg}',
+  }
+  return map[status] || status
+}
 
 function severityColor(sev) {
   const map = {
