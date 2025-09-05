@@ -256,6 +256,23 @@ function truncate(str, n) {
 }
 
 async function browseIssuesTui({ projectKey, branch, issues, token, host }) {
+  // Workaround: blessed 0.1.81 cannot parse modern terminfo Setulc (underline color) capability
+  // observed on some systems (xterm-256color) -> prints noisy error. Downgrade TERM temporarily.
+  const __origTERM = process.env.TERM
+  let __termDowngraded = false
+  if (__origTERM && /xterm-256color/i.test(__origTERM)) {
+    try {
+      process.env.TERM = "xterm"
+      __termDowngraded = true
+    } catch {}
+  }
+  function __restoreTERM() {
+    if (__termDowngraded) {
+      try {
+        process.env.TERM = __origTERM
+      } catch {}
+    }
+  }
   if (!issues.length) {
     console.log(chalk.green("No issues."))
     return
@@ -405,6 +422,7 @@ async function browseIssuesTui({ projectKey, branch, issues, token, host }) {
 
   screen.key(["q", "C-c"], () => {
     screen.destroy()
+    __restoreTERM()
     process.exit(0)
   })
   // Rely on list's own key handling for movement; enter triggers 'select'
@@ -490,7 +508,9 @@ async function browseIssuesTui({ projectKey, branch, issues, token, host }) {
   await render(0)
   list.focus()
   screen.render()
-}
+  // Ensure TERM restored on normal exit
+  screen.on("destroy", () => __restoreTERM())
+ }
 
 function severityColor(sev) {
   const map = {
