@@ -8,9 +8,11 @@ import {
   getIssueSource,
   getBranches,
 } from "../lib/api.js"
-import { printProjectStatus, printIssues } from "../lib/output.js"
+import { printProjectStatus, printIssues, printIssuesSummary, printIssue, printHotspots, printHotspot, printRules, printRule, printMeasures, printMeasuresHistory, printComponentTree, printDuplications, printQualityProfiles, printQualityGate } from "../lib/output.js"
 import { highlight } from "cli-highlight"
+import { spawn } from "child_process"
 import { loadConfig, writeConfig, resolveConfigPath } from "../lib/config.js"
+import { fetchIssuesSummary, fetchIssue, fetchHotspots, fetchHotspot, fetchRules, fetchRule, fetchMeasures, fetchMeasuresHistory, fetchComponentTree, fetchDuplications, fetchQualityProfiles, fetchQualityGate } from "../lib/api-helpers.js"
 
 const program = new Command()
 
@@ -108,7 +110,7 @@ program
 
 program.addHelpText(
   "after",
-  `\nExamples:\n  sonarqube-dash metrics -p myproj -t $TOKEN --host https://sonar.example.com\n  sonarqube-dash issues -p myproj --severities CRITICAL,MAJOR --limit 20\n  sonarqube-dash config set token=abc project=myproj host=https://sonar.example.com\n  sonarqube-dash config get host\n  sonarqube-dash config show\n  sonarqube-dash config path\n  sonarqube-dash print-config\n`,
+  `\nExamples:\n  sonarqube-dash metrics -p myproj -t $TOKEN --host https://sonar.example.com\n  sonarqube-dash issues -p myproj --severities CRITICAL,MAJOR --limit 20\n  sonarqube-dash issues:summary -p myproj\n  sonarqube-dash config set token=abc project=myproj host=https://sonar.example.com\n  sonarqube-dash config get host\n  sonarqube-dash config show\n  sonarqube-dash config path\n  sonarqube-dash print-config\n`,
 )
 
 program
@@ -138,6 +140,158 @@ program
     "Full-screen interactive TUI (split list/detail/code)",
   )
   .action(runIssues)
+
+program
+  .command("issues:summary")
+  .description("Show aggregated issues counts (facets)")
+  .option("-p, --project <projectKey>", "Project key (or from config)")
+  .option("-b, --branch <branch>", "Branch name")
+  .option("-t, --token <token>", "Auth token (or from config)")
+  .option("-h, --host <url>", "Host URL (or from config)")
+  .option("-c, --config <path>", "Config file path")
+  .option("--facets <list>", "Comma list of facets (default severities,types,statuses)")
+  .option("--json", "JSON output")
+  .action(runIssuesSummary)
+
+program
+  .command("issue")
+  .description("Show a single issue by key")
+  .argument("<key>", "Issue key")
+  .option("-t, --token <token>", "Auth token (or from config)")
+  .option("-h, --host <url>", "Host URL (or from config)")
+  .option("-c, --config <path>", "Config file path")
+  .option("--json", "JSON output")
+  .option("--url", "Print the SonarQube web URL for the issue")
+  .option("--open", "Open the issue in the default browser (mac: open, linux: xdg-open)")
+  .action(runIssue)
+
+program
+  .command("hotspots")
+  .description("List security hotspots")
+  .option("-p, --project <projectKey>", "Project key (or from config)")
+  .option("-b, --branch <branch>", "Branch name")
+  .option("-t, --token <token>", "Auth token (or from config)")
+  .option("-h, --host <url>", "Host URL (or from config)")
+  .option("-c, --config <path>", "Config file path")
+  .option("--status <status>", "Hotspot status (TO_REVIEW or REVIEWED)")
+  .option("--severity <severity>", "SEVERITY (LOW, MEDIUM, HIGH)")
+  .option("-l, --limit <n>", "Max hotspots (default 50)", parseInt)
+  .option("--json", "JSON output")
+  .action(runHotspots)
+
+program
+  .command("hotspot")
+  .description("Show a single hotspot by key")
+  .argument("<key>", "Hotspot key")
+  .option("-t, --token <token>", "Auth token (or from config)")
+  .option("-h, --host <url>", "Host URL (or from config)")
+  .option("-c, --config <path>", "Config file path")
+  .option("--json", "JSON output")
+  .option("--url", "Print the SonarQube web URL for the hotspot")
+  .option("--open", "Open the hotspot in the default browser")
+  .action(runHotspot)
+
+program
+  .command("rules")
+  .description("Search rules")
+  .option("-t, --token <token>", "Auth token (or from config)")
+  .option("-h, --host <url>", "Host URL (or from config)")
+  .option("-c, --config <path>", "Config file path")
+  .option("-q, --query <q>", "Search text")
+  .option("--languages <list>", "Comma list of languages")
+  .option("--tags <list>", "Comma list of tags")
+  .option("--repository <repo>", "Repository key")
+  .option("--severities <list>", "Comma list severities (BLOCKER,CRITICAL,...)")
+  .option("-l, --limit <n>", "Max rules (default 50)", parseInt)
+  .option("--json", "JSON output")
+  .action(runRules)
+
+program
+  .command("rule")
+  .description("Show a single rule")
+  .argument("<key>", "Rule key")
+  .option("-t, --token <token>", "Auth token (or from config)")
+  .option("-h, --host <url>", "Host URL (or from config)")
+  .option("-c, --config <path>", "Config file path")
+  .option("--json", "JSON output")
+  .option("--url", "Print the SonarQube web URL for the rule")
+  .option("--open", "Open the rule in the default browser")
+  .action(runRule)
+
+program
+  .command("measures")
+  .description("Fetch component measures")
+  .requiredOption("-C, --component <key>", "Component key (project or file)")
+  .option("-m, --metrics <list>", "Comma list metric keys", "coverage,bugs,vulnerabilities,code_smells")
+  .option("-b, --branch <branch>", "Branch name")
+  .option("-t, --token <token>", "Auth token")
+  .option("-h, --host <url>", "Host URL")
+  .option("--json", "JSON output")
+  .option("-c, --config <path>", "Config path")
+  .action(runMeasures)
+
+program
+  .command("measures:history")
+  .description("Fetch historical measures")
+  .requiredOption("-C, --component <key>", "Component key")
+  .option("-m, --metrics <list>", "Comma list metric keys", "coverage,bugs,vulnerabilities,code_smells")
+  .option("-b, --branch <branch>", "Branch name")
+  .option("--from <date>", "From date (YYYY-MM-DD)")
+  .option("--to <date>", "To date (YYYY-MM-DD)")
+  .option("-t, --token <token>", "Auth token")
+  .option("-h, --host <url>", "Host URL")
+  .option("--json", "JSON output")
+  .option("-c, --config <path>", "Config path")
+  .action(runMeasuresHistory)
+
+program
+  .command("component-tree")
+  .description("Browse component tree (files)")
+  .requiredOption("-C, --component <key>", "Component key (project or module)")
+  .option("-b, --branch <branch>", "Branch name")
+  .option("-q, --qualifiers <codes>", "Qualifier codes (default FIL)")
+  .option("-m, --metrics <list>", "Comma list metric keys")
+  .option("--strategy <s>", "Tree strategy (leaves|children)", "leaves")
+  .option("-t, --token <token>", "Auth token")
+  .option("-h, --host <url>", "Host URL")
+  .option("--json", "JSON output")
+  .option("-c, --config <path>", "Config path")
+  .action(runComponentTree)
+
+program
+  .command("duplications")
+  .description("Show duplications for a file")
+  .requiredOption("-f, --file <fileKey>", "File component key")
+  .option("-p, --project <projectKey>", "Project key (optional, used for URL context)")
+  .option("-b, --branch <branch>", "Branch name")
+  .option("-t, --token <token>", "Auth token")
+  .option("-h, --host <url>", "Host URL")
+  .option("--json", "JSON output")
+  .option("--url", "Print the SonarQube web URL for the file")
+  .option("--open", "Open the file duplications page in the browser")
+  .option("-c, --config <path>", "Config path")
+  .action(runDuplications)
+
+program
+  .command("quality-profiles")
+  .description("List quality profiles")
+  .option("--language <lang>", "Language key")
+  .option("-p, --project <projectKey>", "Project key to filter active")
+  .option("-t, --token <token>", "Auth token")
+  .option("-h, --host <url>", "Host URL")
+  .option("--json", "JSON output")
+  .option("-c, --config <path>", "Config path")
+  .action(runQualityProfiles)
+
+program
+  .command("quality-gate")
+  .description("Show quality gate project status (shortcut)")
+  .option("-p, --project <projectKey>", "Project key")
+  .option("-t, --token <token>", "Auth token")
+  .option("-h, --host <url>", "Host URL")
+  .option("--json", "JSON output")
+  .option("-c, --config <path>", "Config path")
+  .action(runQualityGate)
 
 program.parse(process.argv)
 
@@ -199,6 +353,45 @@ async function runMetrics(opts) {
     else printProjectStatus({ ...result, branch: branchForDisplay })
   } catch (err) {
     console.error(chalk.red("❌ Error fetching project status:"), err.message)
+    if (err.response) {
+      console.error(
+        chalk.gray(
+          `HTTP ${err.response.status}: ${JSON.stringify(err.response.data)}`,
+        ),
+      )
+    }
+    process.exit(1)
+  }
+}
+
+async function runIssuesSummary(opts) {
+  const cfg = buildRuntimeConfig(opts)
+  if (!cfg.token) {
+    console.error(chalk.red("Missing token (set via config, env, or --token)"))
+    process.exit(1)
+  }
+  if (!cfg.project) {
+    console.error(
+      chalk.red("Missing project (set via config, env, or --project)"),
+    )
+    process.exit(1)
+  }
+  try {
+    const summary = await fetchIssuesSummary({
+      host: cfg.host,
+      token: cfg.token,
+      project: cfg.project,
+      branch: cfg.branch,
+      facets: opts.facets,
+    })
+    if (opts.json) {
+      console.log(JSON.stringify(summary, null, 2))
+    } else {
+      printIssuesSummary(summary)
+    }
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err)
+    console.error(chalk.red("❌ Error fetching issues summary:"), msg)
     if (err.response) {
       console.error(
         chalk.gray(
@@ -564,6 +757,222 @@ function guessLang(issue) {
   if (lower.endsWith(".xml")) return "xml"
   if (lower.endsWith(".json")) return "json"
   return "plaintext"
+}
+
+// ---- New command handlers ----
+function buildIssueUrl(host, issueKey, projectKey) {
+  const base = host.replace(/\/$/, '')
+  const projectPart = projectKey ? `id=${encodeURIComponent(projectKey)}&` : ''
+  return `${base}/project/issues?${projectPart}open=${encodeURIComponent(issueKey)}&issues=${encodeURIComponent(issueKey)}`
+}
+function buildHotspotUrl(host, hotspotKey, projectKey) {
+  const base = host.replace(/\/$/, '')
+  const projectPart = projectKey ? `id=${encodeURIComponent(projectKey)}&` : ''
+  return `${base}/security_hotspots?${projectPart}hotspots=${encodeURIComponent(hotspotKey)}&open=${encodeURIComponent(hotspotKey)}`
+}
+function buildRuleUrl(host, ruleKey) {
+  const base = host.replace(/\/$/, '')
+  return `${base}/coding_rules?open=${encodeURIComponent(ruleKey)}&rule_key=${encodeURIComponent(ruleKey)}`
+}
+function buildFileUrl(host, componentKey, branch) {
+  const base = host.replace(/\/$/, '')
+  const branchPart = branch ? `&branch=${encodeURIComponent(branch)}` : ''
+  return `${base}/code?id=${encodeURIComponent(componentKey)}${branchPart}`
+}
+function openUrl(url) {
+  const opener = process.platform === 'darwin' ? 'open' : (process.platform === 'win32' ? 'start' : 'xdg-open')
+  try {
+    const child = spawn(opener, [url], { stdio: 'ignore', detached: true })
+    child.unref()
+  } catch (e) {
+    console.error(chalk.red('Failed to open browser:'), e.message)
+  }
+}
+
+async function runIssue(opts, key) {
+  const issueKey = typeof key === 'string' ? key : (Array.isArray(key) ? key[0] : undefined)
+  const cfg = buildRuntimeConfig(opts)
+  if (!cfg.token) { console.error(chalk.red("Missing token")); process.exit(1) }
+  if (!issueKey) { console.error(chalk.red("Issue key required")); process.exit(1) }
+  try {
+    const issue = await fetchIssue({ host: cfg.host, token: cfg.token, issueKey })
+    if (!issue) { console.error(chalk.yellow("Issue not found")); process.exit(1) }
+    if (cfg.json || opts.json) console.log(JSON.stringify(issue, null, 2))
+    else {
+      printIssue(issue)
+      if (opts.url) {
+        const url = buildIssueUrl(cfg.host, issue.key, issue.project)
+        console.log(url)
+      }
+      if (opts.open) {
+        const url = buildIssueUrl(cfg.host, issue.key, issue.project)
+        console.log(chalk.gray('Opening: ') + url)
+        openUrl(url)
+      }
+    }
+  } catch (e) {
+    console.error(chalk.red("❌ Error fetching issue:"), e.message)
+    process.exit(1)
+  }
+}
+
+async function runHotspots(opts) {
+  const cfg = buildRuntimeConfig(opts)
+  if (!cfg.token) { console.error(chalk.red("Missing token")); process.exit(1) }
+  if (!cfg.project) { console.error(chalk.red("Missing project")); process.exit(1) }
+  try {
+    const data = await fetchHotspots({ host: cfg.host, token: cfg.token, project: cfg.project, branch: cfg.branch, status: opts.status, severity: opts.severity, limit: opts.limit || 50 })
+    if (cfg.json || opts.json) console.log(JSON.stringify(data, null, 2))
+    else printHotspots(data)
+  } catch (e) {
+    console.error(chalk.red("❌ Error fetching hotspots:"), e.message)
+    process.exit(1)
+  }
+}
+
+async function runHotspot(opts, key) {
+  const hotspotKey = typeof key === 'string' ? key : (Array.isArray(key) ? key[0] : undefined)
+  const cfg = buildRuntimeConfig(opts)
+  if (!cfg.token) { console.error(chalk.red("Missing token")); process.exit(1) }
+  if (!hotspotKey) { console.error(chalk.red("Hotspot key required")); process.exit(1) }
+  try {
+    const hotspot = await fetchHotspot({ host: cfg.host, token: cfg.token, hotspotKey })
+    if (!hotspot) { console.error(chalk.yellow("Hotspot not found")); process.exit(1) }
+    if (cfg.json || opts.json) console.log(JSON.stringify(hotspot, null, 2))
+    else {
+      printHotspot(hotspot)
+      if (opts.url) {
+        const url = buildHotspotUrl(cfg.host, hotspot.key, hotspot.project)
+        console.log(url)
+      }
+      if (opts.open) {
+        const url = buildHotspotUrl(cfg.host, hotspot.key, hotspot.project)
+        console.log(chalk.gray('Opening: ') + url)
+        openUrl(url)
+      }
+    }
+  } catch (e) {
+    console.error(chalk.red("❌ Error fetching hotspot:"), e.message)
+    process.exit(1)
+  }
+}
+
+async function runRules(opts) {
+  const cfg = buildRuntimeConfig(opts)
+  if (!cfg.token) { console.error(chalk.red("Missing token")); process.exit(1) }
+  try {
+    const data = await fetchRules({ host: cfg.host, token: cfg.token, query: opts.query, languages: opts.languages, tags: opts.tags, repository: opts.repository, activeSeverities: opts.severities, limit: opts.limit || 50 })
+    if (cfg.json || opts.json) console.log(JSON.stringify(data, null, 2))
+    else printRules(data)
+  } catch (e) { console.error(chalk.red("❌ Error searching rules:"), e.message); process.exit(1) }
+}
+
+async function runRule(opts, key) {
+  const ruleKey = typeof key === 'string' ? key : (Array.isArray(key) ? key[0] : undefined)
+  const cfg = buildRuntimeConfig(opts)
+  if (!cfg.token) { console.error(chalk.red("Missing token")); process.exit(1) }
+  if (!ruleKey) { console.error(chalk.red("Rule key required")); process.exit(1) }
+  try {
+    const rule = await fetchRule({ host: cfg.host, token: cfg.token, key: ruleKey })
+    if (!rule) { console.error(chalk.yellow("Rule not found")); process.exit(1) }
+    if (cfg.json || opts.json) console.log(JSON.stringify(rule, null, 2))
+    else {
+      printRule(rule)
+      if (opts.url) {
+        const url = buildRuleUrl(cfg.host, rule.key)
+        console.log(url)
+      }
+      if (opts.open) {
+        const url = buildRuleUrl(cfg.host, rule.key)
+        console.log(chalk.gray('Opening: ') + url)
+        openUrl(url)
+      }
+    }
+  } catch (e) { console.error(chalk.red("❌ Error fetching rule:"), e.message); process.exit(1) }
+}
+
+async function runMeasures(opts) {
+  const cfg = buildRuntimeConfig(opts)
+  if (!cfg.token) { console.error(chalk.red("Missing token")); process.exit(1) }
+  const component = opts.component
+  if (!component) { console.error(chalk.red("Component key required")); process.exit(1) }
+  const metrics = opts.metrics
+  try {
+    const componentData = await fetchMeasures({ host: cfg.host, token: cfg.token, component, metricKeys: metrics, branch: cfg.branch })
+    if (!componentData) { console.error(chalk.yellow("No measures returned")); process.exit(1) }
+    if (cfg.json || opts.json) console.log(JSON.stringify(componentData, null, 2))
+    else printMeasures(componentData)
+  } catch (e) { console.error(chalk.red("❌ Error fetching measures:"), e.message); process.exit(1) }
+}
+
+async function runMeasuresHistory(opts) {
+  const cfg = buildRuntimeConfig(opts)
+  if (!cfg.token) { console.error(chalk.red("Missing token")); process.exit(1) }
+  const component = opts.component
+  if (!component) { console.error(chalk.red("Component key required")); process.exit(1) }
+  const metrics = opts.metrics
+  try {
+    const history = await fetchMeasuresHistory({ host: cfg.host, token: cfg.token, component, metrics, branch: cfg.branch, from: opts.from, to: opts.to })
+    if (cfg.json || opts.json) console.log(JSON.stringify(history, null, 2))
+    else printMeasuresHistory(history)
+  } catch (e) { console.error(chalk.red("❌ Error fetching measures history:"), e.message); process.exit(1) }
+}
+
+async function runComponentTree(opts) {
+  const cfg = buildRuntimeConfig(opts)
+  if (!cfg.token) { console.error(chalk.red("Missing token")); process.exit(1) }
+  const component = opts.component
+  if (!component) { console.error(chalk.red("Component key required")); process.exit(1) }
+  try {
+    const tree = await fetchComponentTree({ host: cfg.host, token: cfg.token, component, branch: cfg.branch, qualifiers: opts.qualifiers || 'FIL', metricKeys: opts.metrics, strategy: opts.strategy })
+    if (cfg.json || opts.json) console.log(JSON.stringify(tree, null, 2))
+    else printComponentTree(tree)
+  } catch (e) { console.error(chalk.red("❌ Error fetching component tree:"), e.message); process.exit(1) }
+}
+
+async function runDuplications(opts) {
+  const cfg = buildRuntimeConfig(opts)
+  if (!cfg.token) { console.error(chalk.red("Missing token")); process.exit(1) }
+  const fileKey = opts.file
+  if (!fileKey) { console.error(chalk.red("File key required")); process.exit(1) }
+  try {
+    const dups = await fetchDuplications({ host: cfg.host, token: cfg.token, project: opts.project || cfg.project, branch: cfg.branch, fileKey })
+    if (cfg.json || opts.json) console.log(JSON.stringify(dups, null, 2))
+    else {
+      printDuplications(dups)
+      if (opts.url || opts.open) {
+        const fileKey = opts.file
+        const url = buildFileUrl(cfg.host, fileKey, cfg.branch)
+        if (opts.url) console.log(url)
+        if (opts.open) {
+          console.log(chalk.gray('Opening: ') + url)
+          openUrl(url)
+        }
+      }
+    }
+  } catch (e) { console.error(chalk.red("❌ Error fetching duplications:"), e.message); process.exit(1) }
+}
+
+async function runQualityProfiles(opts) {
+  const cfg = buildRuntimeConfig(opts)
+  if (!cfg.token) { console.error(chalk.red("Missing token")); process.exit(1) }
+  try {
+    const profiles = await fetchQualityProfiles({ host: cfg.host, token: cfg.token, language: opts.language, project: opts.project || cfg.project })
+    if (cfg.json || opts.json) console.log(JSON.stringify(profiles, null, 2))
+    else printQualityProfiles(profiles)
+  } catch (e) { console.error(chalk.red("❌ Error fetching quality profiles:"), e.message); process.exit(1) }
+}
+
+async function runQualityGate(opts) {
+  const cfg = buildRuntimeConfig(opts)
+  if (!cfg.token) { console.error(chalk.red("Missing token")); process.exit(1) }
+  if (!cfg.project) { console.error(chalk.red("Missing project")); process.exit(1) }
+  try {
+    const gate = await fetchQualityGate({ host: cfg.host, token: cfg.token, project: cfg.project })
+    if (!gate) { console.error(chalk.yellow("No gate data")); process.exit(1) }
+    if (cfg.json || opts.json) console.log(JSON.stringify(gate, null, 2))
+    else printQualityGate(gate)
+  } catch (e) { console.error(chalk.red("❌ Error fetching quality gate:"), e.message); process.exit(1) }
 }
 
 function colorizeSnippet(text, issue) {
