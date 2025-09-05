@@ -1,6 +1,6 @@
 {
   "name": "sonarqube-dash",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A CLI tool to query SonarQube dashboard from the terminal",
   "main": "bin/sonarqube-dash.js",
   "bin": {
@@ -13,7 +13,6 @@
     "axios": "1.11.0",
     "chalk": "5.6.0",
     "commander": "14.0.0",
-
     "cli-highlight": "2.1.11",
     "blessed": "0.1.81"
   },
