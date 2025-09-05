@@ -10,7 +10,7 @@
 - 🖥️ Full‑screen TUI: split panes (issues list • detail • live code snippet)
 - 🔦 Syntax‑highlighted contextual code (±5 lines) for each issue
 - ⚙️ Layered configuration (user file → env → CLI) with redacted token printouts
-- 📦 Zero runtime deps besides Node + your SonarQube server
+- 📦 No external service deps beyond SonarQube (Node-only runtime)
 - 🔐 Uses user token only (basic auth style) – nothing stored beyond local config
 
 ## 🧩 Install
@@ -109,7 +109,7 @@ q Quit | ↑/↓ Navigate | enter Load detail+code | r Refresh snippet | b Branc
 
 Precedence (lowest → highest):
 
-1. User config file: `$XDG_CONFIG_HOME/sonarqube-dash-cli/config.json` or `~/.config/sonarqube-dash-cli/config.json`
+1. Config file (default: `$XDG_CONFIG_HOME/sonarqube-dash-cli/config.json` or `~/.config/sonarqube-dash-cli/config.json`, or any file passed via `-c/--config`)
 2. Environment variables
 3. CLI flags
 
@@ -167,6 +167,7 @@ For each issue the tool requests the component's source via:
 
 Displayed with ±5 lines context and highlighted (problematic underline color sequences stripped for terminal compatibility).
 
+
 ## 🧱 Output Redaction
 
 `print-config` and `metrics --print-config` mask the token as `***` while leaving other fields intact.
@@ -187,12 +188,6 @@ Displayed with ±5 lines context and highlighted (problematic underline color se
 - Export reports (markdown / HTML)
 - Inline fix suggestions (where rule metadata permits)
 
-## 🛑 Exit Codes
-
-| Code | Meaning                      |
-| ---- | ---------------------------- |
-| 0    | Success                      |
-| 1    | Error (auth / network / API) |
 
 ## 📄 License
 
