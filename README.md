@@ -51,7 +51,7 @@ sonarqube-dash issues -i -b develop
 | -------------- | ------------------------------------------- | -------------------------------------------------------------------------------- |
 | `metrics`      | Project metrics + quality gate              | `-p --project`, `-b --branch`, `-t --token`, `-j --json`, `--print-config`       |
 | `issues`       | List issues (plain / JSON / TUI)            | `-i` (TUI), `-l --limit`, `--severities`, `--types`, `--statuses`, `-b --branch` |
-| `config`       | Manage local config file                    | `--set key=val`, `--get key`, `--path`                                           |
+| `config`       | Manage local config file                    | `set`, `get`, `show`, `path`                                                     |
 | `print-config` | Show merged runtime config (token redacted) | `-c --config`                                                                    |
 
 ### Metrics
@@ -137,16 +137,16 @@ Example file (at `~/.config/sonarqube-dash-cli/config.json`):
 
 ```bash
 # Create / update values
-sonarqube-dash config --set token=abc123 project=myproj host=https://sonarqube.example.com branch=main
+sonarqube-dash config set token=abc123 project=myproj host=https://sonarqube.example.com branch=main
 
 # Read a single field
-sonarqube-dash config --get project
+sonarqube-dash config get project
 
 # Show stored file (token redacted)
-sonarqube-dash config
+sonarqube-dash config show
 
 # File path in use (defaults to user config path)
-sonarqube-dash config --path
+sonarqube-dash config path
 ```
 
 ## 🧪 Filters (Issues)

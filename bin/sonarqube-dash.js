@@ -29,14 +29,71 @@ program
   .option("-j, --json", "Output as JSON instead of pretty text", false)
   .action(runMetrics)
 
-program
+const configCmd = program
   .command("config")
-  .description("Get or set configuration values")
-  .option("-c, --config <path>", "Path to config file")
-  .option("--get <key>", "Get a single key value (token/project/host/branch)")
-  .option("--set <kv...>", "Set one or more key=value pairs")
-  .option("--path", "Print the resolved config file path")
-  .action(runConfig)
+  .description("Manage configuration file values")
+  .option("-c, --config <path>", "Path to config file (overrides default)")
+
+configCmd
+  .command("set")
+  .description("Set one or more key value pairs")
+  .argument("<kv...>", "key=value pairs to set (token project host branch)")
+  .action((pairs, opts, cmd) => {
+    // pairs includes all key=value arguments
+    const parent = cmd.parent?.parent || program
+    const parentOpts = parent.opts ? parent.opts() : {}
+    const updates = {}
+    for (const pair of pairs) {
+      const idx = pair.indexOf("=")
+      if (idx === -1) {
+        console.error(chalk.red(`Invalid format (expected key=value): ${pair}`))
+        process.exit(1)
+      }
+      const key = pair.slice(0, idx)
+      const value = pair.slice(idx + 1)
+      updates[key] = value
+    }
+    const result = writeConfig(updates, parentOpts.config)
+    console.log(`Updated ${result.path}`)
+  })
+
+configCmd
+  .command("get")
+  .description("Get a single key value")
+  .argument("<key>", "token | project | host | branch")
+  .action((key, _opts, cmd) => {
+    const parent = cmd.parent?.parent || program
+    const parentOpts = parent.opts ? parent.opts() : {}
+    const { configFromFile } = loadConfig(parentOpts.config)
+    if (Object.prototype.hasOwnProperty.call(configFromFile, key)) {
+      if (key === "token") console.log("***")
+      else console.log(configFromFile[key])
+    } else {
+      process.exit(1)
+    }
+  })
+
+configCmd
+  .command("path")
+  .description("Print the resolved config file path")
+  .action((_args, _opts, cmd) => {
+    const parent = cmd.parent?.parent || program
+    const parentOpts = parent.opts ? parent.opts() : {}
+    console.log(resolveConfigPath(parentOpts.config))
+  })
+
+configCmd
+  .command("show")
+  .description("Show stored config (token redacted)")
+  .action((_args, _opts, cmd) => {
+    const parent = cmd.parent?.parent || program
+    const parentOpts = parent.opts ? parent.opts() : {}
+    const { configFromFile } = loadConfig(parentOpts.config)
+    const out = { ...configFromFile }
+    if (out.token) out.token = "***"
+    console.log(JSON.stringify(out, null, 2))
+  })
+
 
 program
   .command("print-config")
@@ -51,7 +108,7 @@ program
 
 program.addHelpText(
   "after",
-  `\nExamples:\n  sonarqube-dash metrics -p myproj -t $TOKEN --host https://sonar.example.com\n  sonarqube-dash issues -p myproj --severities CRITICAL,MAJOR --limit 20\n  sonarqube-dash config --set token=abc project=myproj host=https://sonar.example.com\n  sonarqube-dash config --get host\n  sonarqube-dash print-config\n`,
+  `\nExamples:\n  sonarqube-dash metrics -p myproj -t $TOKEN --host https://sonar.example.com\n  sonarqube-dash issues -p myproj --severities CRITICAL,MAJOR --limit 20\n  sonarqube-dash config set token=abc project=myproj host=https://sonar.example.com\n  sonarqube-dash config get host\n  sonarqube-dash config show\n  sonarqube-dash config path\n  sonarqube-dash print-config\n`,
 )
 
 program
@@ -483,39 +540,3 @@ function colorizeSnippet(text, issue) {
   }
 }
 
-function runConfig(opts) {
-  const pathUsed = resolveConfigPath(opts.config)
-  if (opts.path) {
-    console.log(pathUsed)
-    return
-  }
-  if (opts.set) {
-    const updates = {}
-    for (const pair of opts.set) {
-      const idx = pair.indexOf("=")
-      if (idx === -1) {
-        console.error(chalk.red(`Invalid format (expected key=value): ${pair}`))
-        process.exit(1)
-      }
-      const key = pair.slice(0, idx)
-      const value = pair.slice(idx + 1)
-      updates[key] = value
-    }
-    const result = writeConfig(updates, opts.config)
-    console.log(`Updated ${result.path}`)
-    return
-  }
-  const { configFromFile } = loadConfig(opts.config)
-  if (opts.get) {
-    if (Object.prototype.hasOwnProperty.call(configFromFile, opts.get)) {
-      if (opts.get === "token") console.log("***")
-      else console.log(configFromFile[opts.get])
-    } else {
-      process.exit(1)
-    }
-    return
-  }
-  const out = { ...configFromFile }
-  if (out.token) out.token = "***"
-  console.log(JSON.stringify(out, null, 2))
-}
